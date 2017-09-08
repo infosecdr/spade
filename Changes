@@ -1,0 +1,174 @@
+Changes in Spade version 030125.1 (from 030123.1)
+--------------------------------------------------
++ minor documentation reformatting
+
+
+Changes in Spade version 030123.1 (from 030117.1)
+--------------------------------------------------
++ fixed the packet cloning facility to resolve a bad interaction with
+    steam4_reassemble that eventually lead to a segmentation fault
++ did some code and documentation de-tabbing
+
+
+Changes in Spade version 030117.1 (from 021031.1)
+--------------------------------------------------
++ fixed problem wherein sometimes Spade wouldn't accept a valid homenet
+    [fix by Risto Vaarandi]
++ fixed a bug or two that could cause a seg fault in certain circumstances
++ distributed spade.conf now enables fewer detectors than previously; the
+    ones left are the ones that most reliably report on interesting
+    traffic.  spade.more.conf has more detectors enabled; use this to look
+    for additional types of anomalous traffic.
++ you can now reverse the response waiting type for a Spade detector with
+    the advanced option revwaitrpt
++ scalehalflife advanced option added to help set the half life of
+    observations
++ reminder added to installation output about installing when you don't
+    have automake installed
++ Spade internals now better documented
++ updated documentation
+
+
+Changes in Spade version 021031.1 (from 021029.1)
+--------------------------------------------------
++ fixed a bug introduced in the last version causing compiler to complain
+    about undeclared variable 'ap'
++ how many packets were stored, how many were anomalous, and overall count
+    is now reported accurately in spade log file
++ avoided compiler warning about "subscript has type `char'" that some
+    people experienced
++ support added for installing Spade when automake is not available (see
+    Installation file)
+
+
+Changes in Spade version 021029.1 (from 021026.1)
+--------------------------------------------------
++ fixed installation Makefile; in previous versions it doesn't patch log.c
+    correctly (if you use snort -d you may have seen the wrong packet
+    displayed in a log file)
++ more Spade warning/error messages will report the offending location in
+    your config file (if applicable)
++ some internal cleanup and minor changes
+
+
+Changes in Spade version 021026.1 (from 021012.1)
+--------------------------------------------------
++ ICMP traffic now analyzed for anomalies
+  + dead-dest detector type now looks for ICMP traffic to unused IP
+    addresses
+  + new odd-typecode detector type looks for ICMP packets with rare type
+    and code fields
++ new odd-port-dest detector type looks for sources connecting to an
+    unusual destination for a destination port (among destination ports
+    that are observed to have a predictable set of destinations)
++ you can now exclude certain reports on a Spade-wide basis in addition to
+    on a detector-specific basis (add Xdips, Xdports, Xsips, and/or
+    Xsports on the main Spade configuration line)
++ dead-dest will no longer report on broadcast IPs
++ sped Spade up a little through some optimizations
++ spade.conf updated for new detection capabilities
++ Spade log file configured in the distributed spade.conf is now called
+    spade.log (instead of log.txt) for clarity
+
+
+Changes in Spade version 021012.1 (from 021008.1)
+--------------------------------------------------
+
++ ICMP unreachable messages now processed
+  + UDP with closed-dport and odd-dport with response waiting now requires
+    an unreachable for a report
+  + dead-dest with response waiting uses it as a host-alive indication
++ Fixed oversight whereby Spade's log wasn't always produced
++ Spade's log now includes enhanced information on what each detector did,
+    which can guide detector tuning for reports and CPU use
++ Fixed problem with installation Makefile
++ Spade now makes sure each detector has a unique id specified (previously a
+    seg-fault eventually occurred)
++ Spade's README and Usage files now installed in snort's 'doc' directory
++ spade.conf now added to snort.conf when installing
++ Responses can now match several reports on the waiting queue
++ Added some more defensive code
+
+
+Changes in Spade version 021008.1 (from 010818.1)
+--------------------------------------------------
+
++ Large expansion of Spade detection capabilities, including:
+    + UDP and non-SYN TCP anomaly detection added
+    + a new detection type looks for packets to unused IP addresses
+    + another new detection type looks for sources using unusual destination
+        port numbers
+    + you can apply Spade to the outbound direction of your network as well
+        as inbound and internal
++ You can now ask Spade to hold a report for a few seconds to see if the
+    port is open or closed (bye bye passive FTP reports)
++ Ported to Snort 1.9
++ You have a little more control over what is reported (you can suppress
+    certain source or dest networks and source or dest ports)
++ Relative anomaly scores are now standard (unlike the formerly standard raw
+    anomaly scores, this has a much more predictable range)
++ Spade alert message strings updated (e.g., now always starts with "Spade",
+    indicates detection type, and indicates scope detection was being
+    applied to)
++ The way you configure Spade has changed (but backwards compatibility
+    preserved); you now enable a number of detectors, all options are in the
+    form of <option>=<val>, etc.
++ You can now control whether Spade reports go to the Snort alert facility,
+    log facility, or both
++ Documentation significantly updated
++ New, easier installation into Snort
++ You can now specify your Spade homenets in the Snortesque manner of
+    [<net>,<net>]
++ spade-threshadvise (formerly called spade-threshlearn) now correctly
+    reports how long it ran for
++ Stats mode provides more contextual information
++ The options controlling how Spade's observations decay can now be set in
+    the configuration file
++ Spade produces informative log messages as it starts up
++ Spade now checks to make sure the main configuration line is given before
+    its other configuration lines (this eliminates an obscure error
+    condition when the user forgets the main Spade line)
++ Spade's Snort source files renamed to spp_spade.[ch] from
+    spp_anomsensor.[ch] for clarity
++ Packet cloning patch included in installation (this is Snort internal
+    functionality that this version of Spade requires)
++ Probably more changes I can't recall right now
+
+
+Changes in Spade version 010818.1 (from 011701.1)
+--------------------------------------------------
+
++ changed version numbering from DDMMYY to YYMMDD to be more clear
+internationally and to sort better
++ now produces alerts to all of your Snort output destinations
++ added support for all current versions of Snort
++ added spade-correlate mode to produce IDMEF alerts via TCP sockets (awaits
+addition of output plugin message passing into Snort)
++ -corrscore option computes anomaly scores as originally intended (only
+matters to a few users)
++ updated documentation
+
+
+Changes in Spade version 011701.1 (from 092200.1)
+--------------------------------------------------
+
++ fixed overlooked initialization in adapt and adapt3 modes that was causing
+core dumps for some people near start up [thanks to Craig Barracloug for his
+help in tracking this down]
++ fixed bug with use of inet_ntoa that is a problem in a deep debugging mode
+[contrib by Paul Cardon]
+
+
+Changes in Spade version 092200.1 (from 091500.1)
+--------------------------------------------------
+
++ renamed a couple internal functions to avoid them being called by the
+mysqlclient library and causing a segmentation fault (thanks to
+poltrup@ezol.com for his help in tracking this down)
+
+
+Changes in Spade version 091500.1 (from 091300.1)
+--------------------------------------------------
+
++ moved some global variable declaration to .c files from .h files to avoid
+compile errors about redeclarations

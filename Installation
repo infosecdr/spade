@@ -1,0 +1,58 @@
+Snort installation documentation for Spade v021008.1 and later
+--------------------------------------------------------------
+
+Author: Jim Hoagland (hoagland@SiliconDefense.com)
+
+This file contains information about how to install the Statistical Packet
+Anomaly Detection Engine (Spade) into Snort.
+
+
+-= Installation (from tarball) =-
+
+This is what you will need to do to use Spade:
+
+1)  Move your Spade distribution to the top level of your Snort source
+distribution.  Alternately edit the top of Makefile and change the SNORTBASE
+setting to the location of the top level of your Snort source distribution.
+
+2)  Type 'make' inside the Spade distribution.  If you do not have automake
+installed, also type 'make no-automake'.
+
+3)  Compile and install Snort as normal (e.g., ./configure; make)
+
+
+-= Installation (using Snortenstein) =-
+
+1) Download and unpack the source distribution of Snort if you haven't
+already.  You can get it from:
+
+   http://www.snort.org/dl/
+
+2) If you don't have it already, get Snortenstein following the 2 steps
+here:
+
+   http://sourceforge.net/cvs/?group_id=57280
+
+3) From your Snort distribution directory, run Snortenstein's runme program
+with the argument 'snort_1_9/spade'.
+
+   E.g., ../snortenstein/runme snort_1_9/spade
+
+4) Type 'y' for both the packet-cloning and the Spade patch.
+
+5)  Compile and install Snort as normal (e.g., ./configure; make)
+
+
+-= Installation (for Windows) =-
+
+We're working on installation instruction for Windows.
+
+
+-= Also =-
+
+A copy of spade.conf is in Snort's etc directory.  spade.conf is now also
+added to your snort.conf file.
+
+You may also want to establish a directory in which Spade (while running) can
+create a log file and a state file.  The permissions will need to be such that
+the snort process can read and create/write these files.

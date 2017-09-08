@@ -1,0 +1,989 @@
+Usage file for the Spade v021031.1
+----------------------------------
+
+Author: Jim Hoagland (hoagland@SiliconDefense.com)
+
+This file contains information about how to use and configure the
+Statistical Packet Anomaly Detection Engine (Spade).  This assumes you have
+read the README.Spade file.  Note that while configuration backwards
+compatibility is provided with Spade 011801.1 and earlier, only the new
+preferred style is documented here.
+
+
+----==== The main configuration line ====----
+
+To enable Spade, the main Spade line must appear in your Snort configuration
+file.  Furthermore, it must appear before any Spade configuration lines. 
+This is the form of this line:
+
+preprocessor spade: {<optionname>=<value>}
+
+That is, there is any number of option assignments.  The available options
+are: logfile, statefile, cpfreq, dest, and adjdest.  The meaning of these
+options are described in the following three sections and the sections
+beyond that describe additional configuration options.  (In this manual, a
+reference to "the <optionname> option" or to <optionname> as a value should
+be interpreted as a reference to the <value> portion of the option
+<optionname>.)
+
+
+----==== Log file ====----
+
+The "logfile" option specifies the logging file for Spade.  This is
+regenerated on every SIGHUP, SIGQUIT, SIGINT and SIGUSR1 and on Snort exit.
+At a minimum, the total number of packets received by Spade is listed as is
+a section for each detector.  This section contains statistics useful in
+tuning the detector. Some optional parts of Spade write to this log file as
+well and may cause it to be regenerated at other times.
+
+If this option is '-', then standard output (stdout) is used.  '-' is the
+default.
+
+
+----==== Checkpointing and recovery ====----
+
+Since Spade maintains history-based probability tables, it is important to
+have persistent storage for these table, especially since some sites restart
+their snort processes regularly.
+
+Towards this end, Spade has a checkpoint and recovery feature.  (At present,
+this just covers the probability tables.)  The state file can be specified
+by the "statefile" option and defaults to "spade.rcv".  If this file is
+present when starting up, the initial state of Spade is taken from this. 
+(Otherwise it starts up with a clean slate.)  Periodically this state file
+is updated with the current state.  This is done with a frequency of every
+"cpfreq" updates to the state (default 50000), on SIGHUP, SIGINT, SIGQUIT,
+and SIGUSR1, and on Snort exit.
+
+To disable checkpointing and recovering (not generally recommended), give
+"/dev/null" or "0" as the "statefile" option.
+
+Note that the size of the of file is roughly the size of Spade in memory.
+Also note that it may take a few seconds to checkpoint during which time
+snort will not otherwise run.
+
+Also note that the checkpointing and recovery process is designed to be
+transparent to the user.  However, there are a few situations in which you
+need to pay attention to it.  One of these is when you are experimenting
+with Spade, subjecting it to unusual traffic.  Another is if you start to
+apply Spade to a different network.  In these cases, be sure delete this
+file before starting Spade.
+
+
+----==== Where the alerts go ====----
+
+As indicated in the README file, there are two main types of messages that
+Spade produces.  You can control where these go with the "dest" and
+"adjdest" options on the main Spade configuration line.
+
+The "dest" option can be set to either "alert", "log", or "both".  "alert"
+(the default) means the alerts will go to the Snort alert facility(ies) that
+you have configured, "log" means it go to your configured Snort log
+facility(ies), and "both" means it will go to both locations.
+
+Unless you provide the "adjdest" option, the above applies both the anomaly
+reports and to the threshold adjusted messages.  "adjdest" will override
+this for the threshold adjusted messages.  It accepts the three options
+above plus "none" which will cause these messages to go nowhere.
+
+
+----==== Home networks ====----
+
+Spade will work best if you tell it what network(s) are "inside" of its
+location on the network.  That is, the networks that are being connected to
+a larger network.  (If this concept is a bit fuzzy for your location, just
+set this to your best advantage.)  This is mostly used by Spade to indicate
+which hosts we are expected to get good knowledge about by watching the
+traffic going past Spade.
+
+The spade-homenet line in your snort configuration file specifies these.  It
+takes one of two forms:
+
+    preprocessor spade-homenet: <network> <network> ...
+
+or 
+
+    preprocessor spade-homenet: [<network>,<network>,...]
+
+For both of these, <network> is either CIDR notation for a network (e.g.,
+123.123.128.0/17), an IP address (e.g. 123.123.123.123), or "any" (denoting
+0.0.0.0/0).  If a spade-homenet line is not provided, "any" is your homenet.
+
+Note that this home network specification is independent of the -h option of
+snort and the HOMENET variable in the rules file.
+
+
+----==== Spade detectors ====----
+
+You start up a Spade detector by a line of the form:
+
+    preprocessor spade-detect: {<optionname>=<value>}
+    
+The options that are available will vary with the type of detection you are
+enabling.  The options that are available in more than one detector type are
+described below with all the options available for a given type are
+described in the subsection devoted to that type.
+
+You can enable any number of detectors in Spade by repeatedly providing this
+line; each indicates a separate detector to start up.  (Unless you provide
+at least one spade-detect line or if the main Spade configuration line
+contains deprecated elements, backwards compatibility mode is engaged.  In
+this mode, just one detector is active with a specific type of detection as
+well (type=closed-dport to=home probmode=3 proto=tcp tcpflags=synonly
+relscore=off corrscore=0, unless modified by the deprecated elements). 
+However, you are encouraged to explicitly provide spade-detect lines.)
+
+---=== Common configuration options ===---
+
+These options are available with more than one detector type.
+
+type:  The "type" option indicates the detector type.  Available in this
+    release are "closed-dport", "dead-dest", "odd-dport", "odd-typecode".
+    "closed-dport" is the default.
+
+to:  The "to" scope-defining option lets you chose what direction of traffic
+    to apply the detector to.  If "to" is "home" (the default), the traffic
+    with destinations in your homenet will be examined for anomalies.  If it
+    is "nothome", then outbound traffic will be examined.  If it is "any",
+    then both will be examined.
+
+from:  The "from" scope-defining option lets you choose what sources you
+    want monitored by the detector.  If "from" is "home" (the default), the
+    traffic with a source in your homenet will be examined for anomalies. 
+    If it is "nothome", then externally-sourced traffic will be examined. 
+    If it is "any", then both will be examined.
+
+proto:  This scope-defining option indicates what protocol the detector is
+    being applied to.  "tcp", "udp", and "icmp" are the possible choices
+    and "tcp" is the default.
+
+tcpflags:  When the detector is looking at TCP packets, this scope-defining
+    option indicates which set of TCP flag combinations to look at for
+    anomalous packets.  These are the possibilities (each of which ignore
+    the reserved bits):
+
+    + synonly: only the SYN flag is present
+    + synack: just the SYN and ACK flags are present
+    + setup: the flags make the packet look like the connection setup to a
+        TCP session (i.e., it is synonly or synack)
+    + established: the flags make the packet look like the data-transfer
+        portion of a TCP session
+    + teardown: the flags make the packet look like the (normal or abrupt)
+        closing portion of a TCP session
+    + weird: the flags are nothing that would be found in a TCP session
+        (note that these last 4 tcpflags values are disjoint but cover all
+        possible flags)
+
+    Which exactly of these is available varies with the detector type. 
+    However, "synonly" is the default everywhere where "tcpflags" is
+    accepted.
+
+icmptype:  When the detector is looking at ICMP packets, this scope-defining
+    option indicates which set of ICMP types to look for.  "all" means every
+    value of ICMP type, "err" means those types that indicate an error
+    response (types 3, 4, 5, 11, 12), and "noterr" means the types not
+    indicating an error response.  The default varies with the detection
+    type.
+
+thresh:  This is the (initial) threshold at which packets are reported. If a
+    packet has an anomaly score at least as big as this threshold, it can be
+    sent as an alert.  The detector will produce no reports if this is a
+    negative number.  The default varies with the detector type.
+
+minobs:  This is the minimum number of observations that must be present
+    before the anomaly score is considered reliable.  This is useful because
+    when a detector is first starting up, it does not initially have a good
+    reading of the network.  The specific thing that is being counted and
+    the default varies with detector type.  In any case, if there are not
+    the specified number of observations, a report will not be sent.
+
+wait:  The precise meaning on the "wait" option will vary with detection
+    type and detector scope, but in all cases it is the number of seconds a
+    report that is held on the waiting queue will wait before timing out.
+    This is an integer.  If a response is found sooner, it will be removed
+    at that point.  Note that this wait time is only approximate.  This is
+    because evictions from the waiting queue only happen periodically (once
+    a second).  Also note that evictions will not occur in the absence of
+    Spade getting a packet from Snort because Spade bases its notion of time
+    on the time of packet and not on the real time clock.
+
+Xdips:  Suppress (eXclude) reports from this detector about certain
+    destination IP or destination networks. The presently accepted format is
+    a simple comma separated list of IP addresses and CIDR-denoted networks.
+     Default is to exclude no destination IPs.  You will see no reports from
+    this detector of packets to this host.
+
+Xdports:  Suppress reports from this detector about certain destination port
+    numbers. The value must be a comma-separated list of port numbers
+    presently accepted format is a simple comma separated list of.  Default
+    is to exclude no destination ports.  You will see no reports from this
+    detector of packets to this port number.
+
+Xsips:  Suppress reports from this detector about certain source IP or source
+    networks. The presently accepted format is a simple comma separated list
+    of IP addresses and CIDR-denoted networks.  Default is to exclude no
+    source IPs.  Be aware that you a creating a blind spot for this source's
+    packets with respect to this detector.
+
+Xsports:  Suppress reports from this detector about certain source port
+    numbers. The value must be a comma-separated list of port numbers
+    presently accepted format is a simple comma separated list of.  Default
+    is to exclude no source ports.  Be aware that if a source chooses to use
+    this source, this detector will not report this packet.
+
+id:  The id option provides a label to the detector that the user can refer
+    to.  This must start with a letter and can contain letters, numbers, '-'
+    and '_'.  This option is only needed when using some of configuration
+    lines described later that refer to a particular detector.
+
+Advanced options:
+
+revwaitrpt:  If response waiting is in effect for the detector, this option
+    will cause the report to be generated in the opposite response case. 
+    That is, this will change open waiting into closed waiting and vis
+    versa.  This can be used for example with detector type closed-dport to
+    report only on SYNs going to open but rarely used ports.  The default is
+    not to do this.  This has no effect if response waiting in not in use in
+    the detector.
+
+These four options deal with how long a network observation will be
+retained and how much weight is given to it over that time.
+
+scalefreq:  This option is how often (in whole minutes) the existing set of
+    observations are scaled down in weight (decayed) in favor of new
+    observations.  Note that scaling is a generally brief but fairly CPU
+    intensive operation.
+
+scalefactor:  This option is the relative weight to give to traffic observed
+    before scaling as compared to the traffic after.  So, the probabilities
+    you had before the scale is only "scalefactor" as important as those in
+    the later period.  This option and "scalefreq" imply a certain half life
+    for observations.  For example, 240 minutes and 0.96409 together imply a
+    half life of a little over 3 days.
+    
+scalehalflife:  This option is provided as an aid in adjusting the scaling
+    factor to achieve a certain half life.  The value of this argument is
+    the desired half life in hours.  If specified, the scaling factor
+    above will overrode in favor of required value to have observations
+    have the given half life given the scaling frequency.
+
+scalecutoff:  At some point, the occurrence of something a long time ago
+    (relative to the number of times it occurred) makes little difference in
+    the anomaly scores produces, so it might as well be discarded to save
+    memory and time.  "scalecutoff" is the size of an occurrence count at
+    which the record of something has occurred is discarded.  This and the
+    half life indicate how long N occurrences of something at one point in
+    time will remain remembered.  For example, a cutoff of 0.18 and a half
+    life of 3 days implies that a single occurrence of something will be
+    forgotten after a little over a week.
+
+
+---=== The closed-dport detector type ===---
+
+The idea behind the closed-dport detector type is that one can distinguish
+probable portscan packets from normal traffic by looking at what IP and port
+it is headed for.  This is because servers run on well known and often
+well-used ports.  However, a portscanner would not know what is normal and
+would hit ports that are rarely used.  This would also apply to other
+phenomena that exhibit scanning-type behavior such as some worms.  This
+technique can also be more focussed on ports that actually are closed
+(rather than including open but rarely used ports).
+
+This detector type is available for all kinds of TCP and UDP packets, even
+those not known to be presently used by port-scanners.  (In traditional
+Spade, this functionality was only available for internally destined TCP SYN
+traffic.)  For TCP SYN packets, there is an option to wait for a response to
+see if the port was actually open (this will essentially eliminate reports
+about passive FTP).  For non-SYN TCP packets with legal flag combinations,
+this wait is mandatory and a RST is needed to cause an alert (this because
+most TCP packets provide no indication which side of the connection is the
+server and hence should be listening on a well known port).  For UDP
+packets, there is an option to wait for an ICMP unreachable message before
+sending a report.
+
+Anomaly reports from a detector with this detector type contain one of three
+activity descriptions.  If response waiting is not enabled, the text is
+"Rare dest port used".  If response waiting is enabled, and revwaitrpt is
+not in effect, the text is "Closed dest port used".  If response waiting is
+enabled and revwaitrpt is in effect, the text is "Rare but open dest port
+used".
+
+--== Options ==--
+
+to,id:  See "Common configuration options".
+
+protocol:  See "Common configuration options".  "tcp" and "udp" are available.
+
+tcpflags:  See "Common configuration options".  synonly, synack, established,
+    teardown, and weird are available.
+
+relscore:  This indicate whether to use relative scores rather than raw
+    scores.  The default is to do this, but if you set this option to "off",
+    "false", "no", or 0, raw scores will be used.
+
+thresh:  The (initial) reporting threshold.  The default is 0.85 for relative
+    scores and -1 (off) for raw scores.
+
+minobs:  This is the minimum number an observations about a given
+    destination IP address that we need make before we produce any reports
+    about traffic to that address.  The default is 400 for relative scores
+    and 0 for raw scores.
+
+wait:  This is how long to wait for a response packet.  The default is 0
+    except for TCP synack, established, and teardown cases in which case the
+    default is 5 and it cannot be set to 0.
+
+Advanced options:
+
+scalefreq/scalefactor/scalecutoff:  See "Common configuration options".  The
+    defaults are: 240/0.96409/0.18 (observations have a half life of 3 days
+    and single observations will be forgotten after a week).
+
+scalehalflife: See "Common configuration options".
+
+Obscure options:
+
+corrscore:  Provided for backwards compatibility when raw scores are being
+    used, if this option is "off", "false", "no", or 0, the raw score is
+    calculated in a slightly incorrect way.  However, the incorrectness is
+    usually unimportant.
+
+probmode:  There are four probability modes available in closed-dport. 
+    These modes configure how Spade determines the likelihood of a
+    particular packet.  We think that the default (#3) is the best but it is
+    possible that network will disagree.  This describes the options:
+
+    + 0:  a Bayes network approximation of P(sip,sport,dip,dport)
+    + 1:  P(sip,sport,dip,dport)
+    + 2:  P(sip,dip,dport)
+    + 3:  P(dip,dport)
+
+    If probmode is set to 0, then "relscore" is forced off and "minobs" and
+    "corrscore" do not apply.
+
+--== What traffic is recorded ==--
+
+For detectors applied to TCP, only SYN packets have observations recorded
+about them.  (This should be pretty representative.)  For detectors applied
+to UDP, all UDP packets are recorded.
+
+--== Waiting behavior ==--
+
+This describes the detectors behavior when response waiting is enabled.
+
+When response waiting is enabled for TCP SYN packets, a SYN-ACK packet going
+in the reverse direction with the same set of IPs and ports is considered to
+indicate that the port is open and thus the waiting report is dropped.  If
+there is no response observed within the waiting time, the report will be
+sent.
+
+For other types of TCP packets, a negative response is required.  This
+negative response is embodied by RST packet going in the reverse direction
+with the same set of IPs and ports.  If this is seen, then the report will
+be sent, but it if times out, the report will be dropped.  The situation is
+similar for UDP packets, except that the contents of an ICMP unreachable
+message must list the same set of IPs and ports going in the same direction
+to be considered a negative response.
+
+--== Notes ==--
+
+Outbound traffic:  Detection in this direction is expected to be less
+reliable since you don't know the destinations as well.  But using a hearty
+"minobs" should help.
+
+TCP SYN-only: Unless waiting is enabled, you will see passive FTP traffic
+reported.  This is because passive FTP is unusual in that the server
+temporarily opens a non-well known port that is legitimate to connect to. 
+On the other hand, by enabling waiting, you will not see connection attempts
+to rarely used servers.
+
+Non-SYN and non-weird TCP: You will not get reports about probes to
+non-responsive hosts, to filtered ports and to open ports unless the open
+port is on a Windows machine.  You can use the dead-dest detector type to
+catch traffic to unused IP addresses.
+
+TCP SYN-ACK and RST to local destinations:  Reports from this detector type
+about these kinds of packets may be back-scatter from a SYN packet with a
+source IP that was forged to be an IP address in your network range (this is
+not unusual in DOS attacks).  The original probe would have been in the
+reverse direction.  You can note the pattern of traffic and the destination
+IPs to try to distinguish this from a scan.
+
+TCP established and teardown:  There seem to be several situations in which
+IPs will send a RST at the end of a legitamite connection.  This detector
+may preceive this to be a sign of an unwanted packet and report on it.
+
+UDP: There is no way to distinguish server from client at a packet level, so
+you get some reports on responses to some previous communication to a
+server.  Enabling waiting should help.
+
+
+---=== The dead-dest detector type ===---
+
+The idea behind the dead-dest detector type is that legitimate traffic does
+not typically go to inactive IP addresses.  On the other hand, those
+performing horizontal scanning (including some worms) would not know what IP
+addresses are active and which are inactive.  So, we watch the network to
+see what IP addresses are currently in use and if an packet is headed
+towards a totally quiet IP address, we report on it (perhaps after waiting a
+few seconds for a response).
+
+This detector type is available for all kinds of inbound TCP, UDP and ICMP
+packets, even those not known to be presently used by port-scanners.  For
+all scopes except weird TCP flags, false positive elimination through
+waiting for a response is available.
+
+Anomaly reports from a detector with this detector type contain the activity
+description "Non-live dest used".  The score will always be 1 since our
+threshold is fixed at that level.
+
+--== Options ==--
+
+protocol,id:  See "Common configuration options".
+
+tcpflags:  See "Common configuration options".  synonly, synack, setup,
+    established, teardown, and weird are available.
+
+icmptype:  See "Common configuration options".  noterr is the default.
+
+minobs:  This is the minimum number an observations about your homenet that
+    we need make before we produce any reports.  The default is 2000.
+
+wait:  This is how long to wait for a response packet.  The default is 0.
+
+Advanced options:
+
+scalefreq/scalefactor/scalecutoff:  See "Common configuration options".  The
+    defaults are: 60/0.94387/0.25 (observations have a half life of 12 hours
+    and single observations will be forgotten after 24 hours).
+
+scalehalflife: See "Common configuration options".
+
+--== What traffic is recorded ==--
+
+All detectors of this type record the source IPs of the same representative
+packets from the network.  Specifically, UDP, TCP setup and teardown
+flagged packets, and ICMP packets.
+
+--== Waiting behavior ==--
+
+This describes the detector's behavior when response waiting is enabled.
+
+When response waiting is enabled, likely response packets going in the
+reverse direction with the same set of IPs and ports are monitored.  What is
+watched for depends on the scope:
+    + UDP: all UDP
+    + TCP synonly: SYN-ACKs and RSTs
+    + TCP setup: SYN-ACKs, established, and teardown flagged packets
+    + TCP synack and established: established and teardown flagged packets
+    + TCP teardown: teardown flagged packets
+    + ICMP: same type of ICMP as is being monitored for
+In addition, ICMP unreachable messages with a matching protocol are
+monitored.
+
+If we see a response to a report in the waiting queue, we take that to
+indicate that the IP address is live and thus the waiting report is dropped.
+If there is no response observed withing the waiting time, the report will
+be sent.
+
+--== Notes ==--
+
+The detector type will not work well on asymmetric networks, where it
+cannot see both the inbound and outbound traffic to your homenet.  This is
+because we'd either not be seeing the responses or not seeing traffic being
+monitored.
+
+You might find that some hosts have an obsession with the dead (dead IP
+addresses, that is).  They'll keep retrying to connect.  Each one will
+produce a report if the destination never replies.  Each one is a legitimate
+report, but diminishing returns kicks in at some point.
+
+You might also see alot of ongoing probes from Nimda, CodeRed and the like.
+
+If, when Spade starts up for the first time, a server is temporarily down,
+Spade will produce reports about the access attempts because it has never
+seen a reply.
+
+TCP SYN-ACK and RST and ICMP unreachable:  See the note in dead-dest about
+backscatter, it applies to this detector type as well.
+
+Packets that bear TCP established flags might well be the majority of your
+network traffic.  If you are concerned about Spade performance, keep in mind
+that Spade must look at all traffic in the scope of your detection and all
+possible responses to this traffic.  So you might want to drop response
+waiting for those scopes whose watched-for responses include established
+flag packets.  Then again, Spade was designed to be pretty efficient when
+handling possible responses, so it might not matter much.
+
+
+---=== The odd-dport detector type ===---
+
+The idea behind this detector type is the observation that a given host has
+a set of applications that it normally uses to access the network.  So, if
+we observe it using a different application, that might well be suspicious. 
+Perhaps the host has been compromised or someone is misusing it.
+
+In Spade detectors based on this detector type, we map the above notion of a
+host to an IP address and map the notion of an applications network use to
+the destination port number on a packet it sends.  (Both approximations have
+some rough spots that we hope to address in the future.)
+
+This detector type can be applied to local or remote sources and to TCP's
+connection-initiating packets (i.e., SYNs) or UDP.  Naturally, this is most
+reliably applied to local sources since you'd expect to have the best
+information about their behavior.
+
+Anomaly reports from a detector with this detector type contain the activity
+description "Source used odd dest port".  The scores reported are always
+relative and relate to the source IP.
+
+--== Options ==--
+
+from,id:  See "Common configuration options".
+
+protocol:  See "Common configuration options".  "tcp" and "udp" are available.
+
+thresh:  The (initial) reporting threshold.  The default is 0.8.
+
+minobs:  This is the minimum number an observations about an IP address
+    before we produce any reports regarding it.  The default is 600.
+
+wait:  This is how long to wait for a response packet.  The default is 0.
+
+Advanced options:
+
+scalefreq/scalefactor/scalecutoff:  See "Common configuration options".  The
+    defaults are: 240/0.98363/0.18 (observations have a half life of one
+    week and single observations will be forgotten after about 17.3 days).
+
+scalehalflife: See "Common configuration options".
+
+--== What traffic is recorded ==--
+
+For detectors applied to TCP, SYN-only packets have observations recorded
+about them.  For detectors applied to UDP, all UDP packets are recorded.
+
+--== Waiting behavior ==--
+
+This describes the detectors behavior when response waiting is enabled. 
+Note that while this option is made available to help narrow the reports to
+those going to closed ports, closed port usage detection was not the main
+point of this detector type.  This would essentially limit detection to
+portscanning.
+
+When response waiting is enabled on TCP packets, any SYN-ACK packet going in
+the reverse direction with the same set of IPs and ports is considered to
+indicate that the port is open and the waiting report is dropped.  If there
+is no response observed within the waiting time, the report will be sent.
+
+UDP on the other hand, looks for a negative response (when response waiting
+is enabled).  If there is an ICMP unreachable message containing a packet
+matching the original (in terms of protocol, IPs, and ports), then a report
+is sent.  If the report times out, the report is dropped.
+
+--== Notes ==--
+
+TCP: Unless you enable response waiting, you will see passive FTP traffic. 
+This is an example of the imperfect match between application network use
+and dest port number use.
+
+UDP: There is no way to distinguish a UDP session beginning at a packet
+level, so you'll get some (perhaps many) reports on responses to some
+previous communication to a server.  Enabling waiting may help.
+
+The match between host and IP address is not perfect, especially in the case
+of DHCP.  So, the new host assigned an IP address would inherit the profile
+of the previous users of that IP address (if any).  So, you may get some
+false reports until the profile is updated enough.  This may not be that bad
+because the set of hosts in a DHCP pool may have similar network profiles.
+
+Sometimes applications use a range of destination port numbers (e.g.,
+RealPlayer).  Ideally these would be considered together.  But, presently
+each destination port number will have to be learned separately.
+
+If a destination port is only infrequently used by a host relative to the
+amount of traffic from that host, the minimum observation may be met before
+any traffic to a given port number.  So, the first few packets will be
+reported.  The detector adapts pretty quickly to new ports.  A side effect
+of this is that if a host is beginning a scan, you will only see the first
+few packets.
+
+
+---=== The odd-port-dest detector type ===---
+
+As used by a particular source IP, certain destination port numbers have the
+property that the source connects to only a small number (perhaps 1) of
+destination IPs using it.  This is especially true of client hosts which
+often use configured servers for DNS, POP, SMTP, and the like.  The
+observation behind the odd-port-dest detector type is that if we see a
+connection to an unusual destination in a case like this (where the
+destination is fairly predictable), that might be suspicious.  Perhaps the
+host has been compromised or someone is misusing it.
+
+Spade detectors based on this type observe the traffic on the network and
+automatically determines which set of destination port numbers are
+predictable for an IP.  (This set is continually maintained, with the
+decision about whether a particular port should be in that set or not
+rechecked on occasion.)  If some traffic within the detector's scope is
+observed going to a port number that is in the source IP's set, then the
+destination IP is checked.  If that destination IP is anomalous, it is
+reported.
+
+This detector type can be applied to local or remote sources and to TCP's
+connection-initiating packets (i.e., SYNs) or UDP.  Naturally, this is most
+reliably applied to local sources since you'd expect to have the best
+information about their behavior.
+
+Anomaly reports from a detector of this type contain the activity
+description "Source used odd dest for port".  The scores reported are always
+relative and relate to a given source IP and destination port.
+
+--== Options ==--
+
+from,id:  See "Common configuration options".
+
+protocol:  See "Common configuration options".  "tcp" and "udp" are available.
+
+thresh:  The (initial) reporting threshold.  The default is 0.9.
+
+maxentropy:  The highest entropy observed that may be observed by an port
+    (for a source) that is considered predictable and in the set of watched
+    destination ports.  (Entropy is a measure of how much variation
+    (randomness) is found in a set of observations.  0 entropy means that
+    there is only one observed value.  A high number indicates there was
+    alot of variation.  Entropy is measured on a log 2 based scale.)  The
+    default is 2.5.  You can lower it to increase the confidence of reports
+    (but you will not keep as many ports under observation).
+
+minobs:  This is the minimum number an observations about destination port
+    for a source IP we need to have before making any reports regarding it.
+    This is important because if there are too few observations about a
+    port, the entropy will necessarily be low and a port may not have
+    demonstrated its full variance, so you may get reports about an port
+    that will eventually be considered not predictable enough.  The default
+    is 100 times 2 to the power of the maxentropy setting (566 with the
+    default maxentropy) for TCP and double this for UDP.
+
+wait:  This is how long to wait for a response packet.  The default is 0.
+
+Advanced options:
+
+scalefreq/scalefactor/scalecutoff:  See "Common configuration options".  The
+    defaults are: 90/0.97957/0.35 (observations have a half life of 2 days
+    and single observations will be forgotten after about 3 days).
+
+scalehalflife: See "Common configuration options".
+
+--== What traffic is recorded ==--
+
+For detectors applied to TCP, SYN-only packets have observations recorded
+about them.  For detectors applied to UDP, all UDP packets are recorded.
+
+--== Waiting behavior ==--
+
+This describes the detectors behavior when response waiting is enabled. 
+Note that while this option is made available to help narrow the reports to
+those going to closed ports, closed port usage detection was not the main
+point of this detector type.  This would essentially limit detection to
+portscanning.
+
+The waiting behavior for odd-port-dest is identical to that of odd-dport above.
+
+--== Notes ==--
+
+This detector type is a little slower than the other types mainly due to
+needing to calculate the entropy periodically.  It also has significantly
+higher memory use due to the 3-dimensional table of observations that needs
+to be maintained.
+
+Sometimes a destination port will take quite a few observed packets before
+it demonstrates that the destination IP address is difficult to predict in
+general.  This is especially true for UDP (in which every packet is
+considered an observation) and for cases where there are many observations
+in a session (such as with RealPlayer).  You will get a couple reports about
+each new destination between minobs and when enough entropy is demonstrated.
+
+If minobs is too high, you may never have enough observations at a time
+about a particular destination port number of interest to cause it to join
+the watched set of ports.
+
+The match between host and IP address is not perfect, especially in the case
+of DHCP.  So, the new host assigned an IP address would inherit the profile
+of the previous users of that IP address (if any).  So, you may get some
+false reports until the profile is updated enough.  This may not be that bad
+because the set of hosts in a DHCP pool may have the same or similar server
+use.
+
+
+---=== The odd-typecode detector type ===---
+
+This detector type will report on any ICMP packets on your network bearing
+unusual type and code fields.  For example, if your network normally never
+gets any network redirect messages, one would be reported if it occurred. 
+Even a report about this type of activity is not security related, it is
+probably interesting.
+
+This detector type can be applied to traffic heading to your homenet and/or
+traffic not to your homenet and to different types of ICMP.
+
+Anomaly reports from a detector with this detector type contain the activity
+description "Odd ICMP type/code found".  The scores reported are always
+relative and relate to the whole class of traffic indicated by the scope.
+
+--== Options ==--
+
+to,id:  See "Common configuration options".
+
+icmptype:  See "Common configuration options".  any is the default.
+
+thresh:  The (initial) reporting threshold.  The default is 0.9.
+
+minobs:  This is the minimum number an observations about the network needed
+    before we produce any reports regarding it.  The default is 2000 unless
+    icmptype is "any" in which it is 4000.
+
+wait:  This is how long to wait for a response packet.  The default is 0.
+
+Advanced options:
+
+scalefreq/scalefactor/scalecutoff:  See "Common configuration options".  The
+    defaults are: 240/0.96409/0.18 (observations have a half life of 3 days
+    and single observations will be forgotten after a week).
+
+scalehalflife: See "Common configuration options".
+
+--== What traffic is recorded ==--
+
+The same packets that are evaluated are also recorded.
+
+--== Waiting behavior ==--
+
+This describes the detectors behavior when response waiting is enabled. Note
+that while this option is made available to help cut down on reports, you
+probably won't want or need this.
+
+When response waiting is enabled, any ICMP non-error packet going in the
+reverse direction with the same pair of IPs is considered to indicate that
+the initial ICMP traffic was desired and the waiting report is dropped.  If
+there is no response observed within the waiting time, the report will be
+sent.
+
+--== Notes ==--
+
+When detectors based on this type are starting up, you are more likely to
+receive reports about less interesting activity.  As time goes along, the
+reports from this should be more interesting.
+
+
+----==== Finding a good threshold ====----
+
+There are 4 facilities for helping you find and maintain an appropriate
+reporting threshold for your detector, so that you do not get flooded with
+alerts about normal packets by having too low of a threshold and so that you
+do not miss packets of interest by having too high a threshold.  One is
+threshold learning and the other three are different means of automatically
+adapting the threshold to meet observed conditions.
+
+We expect these facilities to be less needed when using relative anomaly
+scores (which is the default now) since we think it will be less hard to
+guess at a decent fixed threshold.  So, you can either use one of the 4
+facilities described in the next two subsections or do it yourself by trying
+out different threshold values.
+
+The premise for these is that you want to aim for a certain rate of alerts,
+a rate just high enough to catch interesting events.  Each of these
+facilities observes the network for a certain interval of time, keeping
+record of the anomaly scores for the packets observed.  Based on this, an
+"ideal" threshold can be derived that would have produced exactly the number
+of alerts wanted. At least, during that time interval.  We have observed
+that this is a pretty noisy process and this will vary from interval to
+interval.
+
+Note that regardless of the way your threshold is set, your rate of alerts
+will not be steady.  This is since the rate of anomalous events is not
+steady. For example, if someone runs a noisy Nmap across your network, you
+will get more alerts than normal (unless, of course, this is normal).  So,
+for whatever target rate you aim for, consider that to be your target for
+most of the time intervals.
+
+Each of these facilities requires you to refer to the specific detector
+which you are trying find a threshold for.  In order to do that, you must
+set the "id" option on the detector to a unique value.  Moreover, the line
+establishing the detector must appear earlier in Snort configuration file
+than these facilities.
+
+---=== Threshold adapting ===---
+
+There are three modes of adapting.  None of these are on by default, but if
+one were, then method #3 would be the default since we think it should work
+the best.  Your network may disagree though :).
+
+Method #1 is the simplest approach.  It periodically takes a weighted
+average of the current threshold and the recently observed ideal.  You
+activate this by adding a line of this form to the Snort configuration file:
+
+    preprocessor spade-adapt:  {<optionname>=<value>}
+    
+where <optionname> is "id", "target", "obsper", "newweight", or "bycount".
+
+The required "id" field refers to the id of the detector whose threshold you
+are adapting.
+
+The target packet count is given by the "target" argument (default 20). The
+length of time (in hours) during which that count is aimed for and the
+refresh rate for the threshold is given by "obsper" (default 2). 
+"newweight" is the weight given to the new component of the weighted average
+(default 0.5). Higher values (up to 1.0) give more weight to recent
+observations.
+
+An option with method #1 is to measure the adapt period by packet count
+rather than by time.  That is, the adapt time specification is converted
+into a count of packets, based on the current best estimate of a rate of
+packets.  The advantage here is that observed ideal values between periods
+is more likely to be similar since about the same number of packets were
+considered for each, so the transitions will be steadier.  This is on by
+default.  To disable, set the "bycount" argument to 0 (rather than 1).
+
+Method #2 is more involved.  A new threshold is based the average of short,
+medium and long term components.  This is the line to add to the
+configuration file:
+
+    preprocessor spade-adapt2: {<optionname>=<value>}
+    
+where <optionname> is "id", "target", "obsper", "NS", "NM", or "NL".
+
+The required "id" field refers to the id of the detector whose threshold you
+are adapting.
+
+"target" is the specification of the number of alerts wanted.  If it is >=
+1, it is an hourly alert rate.  If it is < 1, then it is a fraction of
+considered packets to report, based on the best estimate of your packet
+rate. The later form of specification might be preferred if your network
+might experience a shift in packet rates.  The default is 0.01 (1%).
+
+"obsper" is the number of minutes in an observation window (default 15). The
+is the frequency with which the reporting threshold is updated and is
+actually converted to a packet count.  "NS" times "obsper" is how long the
+short term is.  The default for "NS" is 4, so the combined default is 1
+hour. "NM" is the number of short term periods in the medium term (default
+24) and "NL" is the number of medium term periods in the long term (default
+7).
+
+For a more complete description of how this mode works, see the comments in
+the source code.
+
+Method #3 is fairly simple.  The reporting threshold is based on an average
+of the ideal threshold values from the last N observation periods.  (If
+there haven't been N observation periods yet, it just takes the average of
+the ones seen so far).  This mode is invoked with a line of the form:
+
+    preprocessor spade-adapt3: {<optionname>=<value>}
+    
+where <optionname> is "id", "target", "obsper", or "numper".
+
+The required "id" field refers to the id of the detector whose threshold you
+are adapting.
+
+"target" is the specification of the target alert rate and takes the same
+form as that in method #2 (default 0.01).  "obsper" is the number of minutes
+in a period of observation (default 60); this is converted to count of
+packets.  "numper" is the number of observations to average over (default
+168, which is the number of hours in a week).
+
+You may have multiple adaptings engaged at the same time, but each must
+apply to different detectors.
+
+
+---=== Threshold advising (formerly known as threshold learning) ===---
+
+To start up threshold advising mode when Snort starts up, provide a line of
+this form in the Snort configuration file:
+
+    preprocessor spade-threshadvise: {<optionname>=<value>}
+    
+where <optionname> is "id", "target", or "obsper".
+
+The required "id" field refers to the id of the detector that you are
+enabling advising regarding.  This mode is enabled for "obsper" hours
+(default 24), after which it reports on the threshold that would have been
+needed to produce "target" scores (default 200) during that time.  At the
+end of the time period, a report about this is generated to the log file
+specified on the main Spade configuration line.  An (perhaps intermediate)
+report is also produced on every SIGHUP, SIGINT, SIGQUIT, and SIGUSR1 and on
+Snort exit.
+
+You may have multiple advisings engaged at the same time, but each must
+apply to different detectors.
+
+
+----==== Survey mode ====----
+
+Survey mode periodically reports information about the anomaly scores
+produced by a detector in the last time interval.  It is activated with the
+following line:
+
+    preprocessor spade-survey: {<optionname>=<value>}
+
+where <optionname> is "id", "surveyfile" or "interval".
+
+The required "id" field refers to the id of the detector (this must be set)
+that you are surveying.  "surveyfile" is the file to write the output to
+(default is standard output) and "interval" is the frequency of the
+observation period, in minutes (default 60).  This mode is active for as
+long as Snort is running.
+
+The file produced is in a table form suitable for importing into
+spreadsheets and databases.  A line of column headers is on the first line
+and the following are tab-separated on the following lines:
+
+    + interval #
+    + number of accepted packets in the interval
+    + median (50th percentile) anomaly score in the interval
+    + 90th percentile anomaly score
+    + 99th percentile anomaly score
+
+Linear interpolation is used for the percentile results if there is no exact
+score in the indicated position.
+
+Note that at present a O(n*n) algorithm is used for storing the anomaly
+scores, so that when number of accepted packets in the interval becomes
+large, this mode runs slowly.  If this mode becomes used seriously, we
+should use an order statistics tree or some other O(n*log(n)) algorithm.
+
+
+----==== Statistics mode ====----
+
+When the statistics mode is activated certain information about the network
+traffic is reported.  This makes use of the any already available
+probabilities from the calculation of the anomaly scores for different
+detectors.  It is enabled with the following line in the configuration file:
+
+    preprocessor spade-stats: <stat-option> <stat-option> ...
+
+where <stat-option> is one of:
+
+    + "entropy" (to display the known entropies and conditional entropies)
+    + "uncondprob" (to display the known non-0 simple (joint) probabilities)
+    + "condprob" (to display the known non-0 conditional (joint)
+    probabilities)
+
+These are written to the log file on SIGHUP, SIGINT, SIGQUIT, and SIGUSR1
+and on Snort exit.  Be aware that it might take a while to write the
+"uncondprob" and "condprob" results as there is generally alot of those.  In
+the present implementation, writing out the "entropy" can take an excessive
+amount of memory.
+
+
+
+----==== Source code parameters ====----
+
+There are a few tunable parameters that you will need to change some numbers
+in the source code in order to adjust.  Fortunately most people probably
+won't want to change these anyway.
+
+A set of parameters are used to control how much memory can be used in
+maintaining the probability state.  A description of exactly what these do
+requires a discussion beyond the scope of this document.  For now, if you
+get a message of the form "exhausted all X blocks of Y <whatever>", try
+increasing the corresponding DEFAULT_MAX_*_SIZE parameter in
+spp_spade.h/params.h.

@@ -1,0 +1,238 @@
+README file for the Spade v021031.1
+-----------------------------------
+
+Greetings,
+
+Welcome to release version 021031.1 of the Spade sensor for Snort. Spade
+stands for Statistical Packet Anomaly Detection Engine and is produced by
+Silicon Defense (http://www.silicondefense.com/).  It reports on report
+unusual, possibly suspicious, packets.  Spade is available via a Snort
+preprocessor plugin.
+
+This document gives an overview of Spade.  The "Getting Started" section
+towards the end of the file will help you get going quickly.  See the Usage
+file for information about installing and using Spade.  See the COPYING file
+for the GNU GPL license.
+
+SPICE is the Stealthy Probing and Intrusion Correlation Engine.  It is part
+of Silicon Defense's work an (unclassified) project funded by the US DARPA
+under different programs.  It consists of two parts, an anomaly sensor
+(Spade) and an event correlator.  The basic operation of this will be that
+Spade will monitor the network and report anomalous events to the
+correlator.  The correlator will then group these events together and send
+out reports of unusual activity (e.g., portscans), even those that have been
+crafted to be difficult to detect (e.g., they probe slowly, from different
+sources, or they randomize the scan).  This distribution is the sensor
+component of Spice.  Stay tuned for the availability of the correlator.
+
+We release this in the hopes that it will be useful.  To us, it has been,
+but of course your mileage may vary.
+
+We would really like your comments on Spade.  One of the reasons we have
+released this is so that we will have different people's feedback so that we
+can improve it.  In particular, we know that your experience with this will
+depend on the characteristics of your network.  E-mail the contact author,
+Jim Hoagland (hoagland@SiliconDefense.com) with any comments or suggestions.
+
+This is released under GNU GPL, which among other things, means that we
+express no warranty for the program.
+
+The web page for Spade and Spice is
+http://www.silicondefense.com/software/spice/.  You can download the latest
+releases of it there.  Also there you can access the Journal of Computer
+Security paper describing the theory behind Spice and learn about some of
+novel data structures and algorithms it uses.
+
+
+----==== What does it do? ====---- 
+
+Spade will review the packets received by Snort, find those of interest and
+report those packets that it believes are anomalous along with an anomaly
+score.
+
+The anomaly score that is assigned is based on the observed history of the
+network.  The fewer times that a particular kind of packet has occurred in
+the past, the higher its anomaly score will be.  Packets are classified by
+their joint occurrence of packet field values.  For example, packets with
+destination IP of 10.10.10.10 and destination port of 8080 might be one kind
+of packet.
+
+To do this, probability tables are maintained that reflect the occurrences
+of different kinds of packets in history, with higher weight on more recent
+events.  We would know, for example, that P(dip=10.10.10.10,dport=8080) is
+10% but that P(dip=10.10.10.10,dport=8079) is 0.1%.  The raw anomaly score
+is calculated directly from the probability.  For a packet X, A(X)=
+-log2(P(X)). So the anomaly score for a 10.10.10.10, 8080 packet is 3.32
+(not very anomalous) and the score for a 10.10.10.10, 8079 packet is 9.97
+(fairly anomalous (?)).  The raw anomaly score is what Spade has
+traditionally had.  Starting with Spade v021007.1, we introduce a relative
+anomaly score, which is the raw anomaly score divided by the highest
+possible raw anomaly score.  This produces a result which is always between
+0 and 1 and thus means the degree of anomalousness in the score is easier to
+interpret.
+
+At any given time, a reporting threshold is defined for the sensor.  For
+each event that exceeds this threshold, an alert is sent.  It is sent to the
+same place(s) that a rule-based alert would be sent to (e.g., Snort alert
+file, syslog, a Snort database, etc.).
+
+In addition to reporting anomalous events, Spade can also be configured to
+generate reports about the network on which it is run.  For example, it can
+tell you the amount of entropy in your destination ports and in your source
+ports given your destination ports or produce periodic reports of the number
+of packets seen and order statistics such as median of the anomaly scores
+produced.
+
+
+----==== What doesn't it do? ====---- 
+
+Spade cannot tell you if a particular reported packet is bad or hostile.  
+It merely knows that certain packets are relatively unusual and has an idea
+how unusual.  You should expect to see alerts about benign activity.
+
+It also cannot report things like attempts to exploit CGI vulnerabilities on
+a popular web server.  This would depend on looking at the packet contents
+and Spade just looks at certain parts of the header.
+
+Spade will not group related anomalous events together.  That is the job of
+the Spice correlator and in any case is best handled outside on an IDS
+sensor.  You might consider using SnortSnarf
+(http://www.silicondefense.com/software/snortsnarf/) to help with this task;
+version 090700.1 and above generate a special section to browse anomaly
+reports.
+
+
+----==== Spade Output ====---- 
+
+Spade produces two types of messages, which, depending on how Spade is
+configured, are sent to Snort's configured alert or log facilities (e.g.,
+alert file, database, etc.).  Brief descriptions are presented here with
+more details in the Usage file.
+
+The more common one has a message in the form "Spade: <activity
+description>: <scope>: <anomaly score>", where <activity description>
+describes what Spade is reporting on, <scope> explains the type of packet
+that was being examined, and <anomaly score> is the raw or relative anomaly
+score that Spade has assessed for the packet.  (Sorry this line is so
+cramped; Snort has no facility to pass along these extra bits of information
+to the output plugins other than through the message field.)
+
+Spade may also periodically produce messages of the form: "Spade: id=<id>:
+Threshold adjusted to T after X alerts (of N)".  This indicates that the
+alerting threshold for detector <id> was changed to T.  This happens when
+you are using one of the threshold adapting mechanisms (see the Usage file).
+ The message also gives information about the number of alerts (X) sent
+since the last time the threshold was adjusted and the total number of
+packets (N) accepted by Spade during that time.
+
+
+----==== Detectors and Detector Types ====---- 
+
+A Spade detector is a component within Spade that is looking for a
+particular type of anomaly over a certain set of packets.  You can configure
+Spade can to employ any number of detectors simultaneously.  These can be of
+different types (where the detection approach is different) or of the same
+type but applied to a different set of packets.  There are five detector
+types included in this release of Spade:
+
++ closed-dport:  This is the traditional Spade detector type.  This detector
+type is looking for packets that are going to closed ports, or at least
+ports that are infrequently used.  This can be used to find portscans
+because legitimate traffic tends to go to open ports.
+
++ dead-dest:  This detector type looks for packets that are going to an IP
+address that is not in use.  This can be used to find portscans because
+legitimate traffic tends to go to live IP addresses.
+
++ odd-dport:  This detector type looks for sources that are using unusual
+destination ports.  This might indicate a compromised host or host misuse
+because destination ports roughly correspond to applications and hosts tend
+to be habitual in application use.
+
++ odd-port-dest:  This detector type looks for sources that make a
+connection to an unusual destination relative to what is normal for the
+destination port.  Since this is only applied to cases where the destination
+is fairly predictable (e.g., as is often the case for port 110 (POP3) and
+port 53 (DNS) on client hosts), this might indicate a compromised host or
+host misuse.
+
++ odd-typecode:  The detector type looks for packets with unusual ICMP type
+and code values.  This may be interesting to know about even when it is not
+suspicious.
+
+We anticipate adding other detector types in future releases.
+
+
+----==== Waiting for a response ====---- 
+
+Depending on detector type, what a detector is being applied to, and user
+configuration, Spade might wait for a follow-up packet for a short amount of
+time before sending off an alert.  It does this in the interest of reducing
+false positives.  In this time, it is looking for a follow-up packet.  Such
+a packet might discount the fact a packet is anomalous or might further
+suggest the fact that it is.  You might view this as another filter applied
+to the packet stream (where having a high anomaly score was the another
+one).
+
+If Spade is put on a point in your network where it will not see the
+responses, this waiting adds no value.  And the subset of Spade's
+functionality that requires responses will not be available to you at that
+tap point.
+
+
+----==== Performance ====---- 
+
+Efficiency will depend on many factors including configuration (especially
+the set of detectors enabled) and will vary from network to network.  We've
+seen performance on the order of 15 microseconds per packet with the
+distributed detector configuration on an 800 MHz P3 (exclusive of Snort's
+reporting but including all other overhead).  Your memory usage will also
+vary but will probably be less than 10 MB or so.  odd-port-dest is known to
+be slower and to use alot of memory.  If your network sees more traffic,
+especially different kinds of traffic, we would expect that your memory
+usage will increase proportionally and your CPU use to increase a little
+(per packet).
+
+Although Spade 020107.1 included a significant restructuring and expansion
+of its capabilities, most of the core functionality was only cosmetically
+changed.  So, we expect this new Spade to be nearly as stable as the
+previous version, which we had no complaints about.
+
+
+----==== Getting Started ====---- 
+
+First you will need to install Spade into Snort as described in the
+"Installation" file.
+
+spade.conf is an example configuration file; use it as your Snort config
+file or include it in your current Snort config file.  It is a good starting
+point for most people as distributed.  If you want to get going quickly, you
+might just want to edit the SPADEDIR variable and the spade-homenet list and
+try it out.  Otherwise, you can browse through the Spade.Usage file to see
+what all your options are and to understand your reports.  If you want to use more of Spade's capabilities (albeit ones that tend to be noisier), you might want to start off with spade.more.conf.
+
+
+----==== Mailing lists ====---- 
+
+You are invited to sign up for the mailing list about Spade.
+
+Spade-users:  A list for users to talk about Spade
+  http://www.silicondefense.com/mailman/listinfo/spade-users
+  spade-users@list.silicondefense.com
+
+You can share your questions and ideas regarding Spade on this list.
+
+
+----==== Contributions ====---- 
+
+We welcome your complaints, kudos, and especially improvements and bugfixes.
+We wish for this to be a useful as possible, so your feedback and assistance
+is important.  You may reach us at hoagland@SiliconDefense.com.
+
+Thank you and happy Spading!
+
+-- Jim Hoagland (hoagland@SiliconDefense.com)
+   Stuart Staniford (stuart@SiliconDefense.com)
+
+P.S.  Incidentally, Spade can be fairly easily ported to other network-based
+IDSs.  Let us know if you are interested.

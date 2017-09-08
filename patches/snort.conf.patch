@@ -1,0 +1,20 @@
+--- snort-1.9.0/etc/snort.conf	Tue Aug 13 20:17:58 2002
++++ snort-1.9.0+Spade-021008/etc/snort.conf	Wed Oct  9 08:23:40 2002
+@@ -108,6 +108,17 @@
+ # the form
+ # preprocessor <name_of_processor>: <configuration_options>
+ 
++# spade: Statistical Packet Anomaly Detection Engine
++# --------------------------------------------------
++# This preprocessor looks over your network and reports on packets that stand
++# out from the others.  For example, they are heading to an unused IP address
++# or are going to a port that is rarely used.  This can be a sign of scanning
++# or some other bad activity.
++ 
++# see spade.conf for more details and to configure Spade
++include spade.conf
++
++
+ # frag2: IP defragmentation support
+ # -------------------------------
+ # This preprocessor performs IP defragmentation.  This plugin will also detect
