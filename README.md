@@ -6,7 +6,7 @@ This paper describes in detail the sophisticated approach being used:
 
 *  Practical Automated Detection of Stealthy Portscans
 *  Journal of Computer Security, Volume 10:1-2. 2002
-*  http://ai2-s2-pdfs.s3.amazonaws.com/01d6/e376e4f68e052d704dcbf4d4b6943d081198.pdf
+*  http://hoagland.org/papers/Practical%20automated%20detection%20of%20stealthy%20portscans.pdf
 
 This code is around 9-10k lines and manages its own memory.  As a Snort plug-in, this needs to be very efficient since it is called on all network packets.
 
